@@ -1,14 +1,8 @@
+import { Server } from 'http';
+
 import request from 'supertest';
 
-import {
-  AppMock,
-  KafkaMock,
-  ConfigMock,
-  LoggerMock,
-  ServiceStateMock,
-} from '../mocks';
-import { App } from '../../src/app';
-import { AuthSetup } from './setup';
+import { AuthSetup, AppSetup } from './setup';
 import { RemoveTemplatesBatchDto } from 'src/types';
 
 jest.mock('@prisma/client', () => ({
@@ -22,27 +16,21 @@ jest.mock('@prisma/client', () => ({
 }));
 
 describe('Templates-batch.routes', () => {
+  let server: Server;
+
+  beforeAll(async () => {
+    server = await AppSetup.initApp();
+  });
+
+  afterAll(() => {
+    server.close();
+  });
+
   const removeTemplatesBatchDto: RemoveTemplatesBatchDto = {
     templates: [1, 2, 8],
   };
 
   it('should return response status 200 and ids and label of templates removed ', async () => {
-    const { PrismaUtilsMock } = AppMock.new();
-    const { KafkaConsumerMock, TenantManagerMock, KafkaProducerMock } =
-      KafkaMock.new([AuthSetup.getTenantInfo()]);
-
-    const app = new App(
-      LoggerMock.new(),
-      ConfigMock.new(),
-      PrismaUtilsMock,
-      KafkaConsumerMock,
-      TenantManagerMock,
-      KafkaProducerMock,
-      ServiceStateMock.new(),
-    );
-    KafkaProducerMock.isConnected.mockResolvedValue(true);
-    const server = await app.init();
-
     const response = await request(server)
       .put('/templates_batch')
       .set('Authorization', `Bearer ${AuthSetup.signJWT()}`)
@@ -56,28 +44,12 @@ describe('Templates-batch.routes', () => {
     const removeTemplatesBatchDto: RemoveTemplatesBatchDto = {
       templates: [],
     };
-    const { PrismaUtilsMock } = AppMock.new();
-    const { KafkaConsumerMock, TenantManagerMock, KafkaProducerMock } =
-      KafkaMock.new([AuthSetup.getTenantInfo()]);
-
-    const app = new App(
-      LoggerMock.new(),
-      ConfigMock.new(),
-      PrismaUtilsMock,
-      KafkaConsumerMock,
-      TenantManagerMock,
-      KafkaProducerMock,
-      ServiceStateMock.new(),
-    );
-    KafkaProducerMock.isConnected.mockResolvedValue(true);
-    const server = await app.init();
 
     const response = await request(server)
       .put('/templates_batch')
       .set('Authorization', `Bearer ${AuthSetup.signJWT()}`)
       .send(removeTemplatesBatchDto);
 
-    server.close();
     expect(response.status).toBe(400);
   });
 });

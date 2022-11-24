@@ -1,13 +1,12 @@
-import { App } from 'src/app';
+import { App } from '../../../src/app';
+import { AuthSetup } from '.';
 import {
   AppMock,
   KafkaMock,
   LoggerMock,
   ConfigMock,
   ServiceStateMock,
-} from 'tests/mocks';
-
-import { AuthSetup } from '.';
+} from '../../mocks';
 
 /**
  * Steps to improve integration tests in the future:
@@ -35,5 +34,5 @@ export const initApp = async () => {
     ServiceStateMock.new(),
   );
 
-  return app.init();
+  return await app.init();
 };

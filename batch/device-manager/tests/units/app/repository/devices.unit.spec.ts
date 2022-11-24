@@ -63,8 +63,8 @@ describe('devicesRepository', () => {
     const device_repository = new DevicesRepository(LoggerMock.new());
     it('should remove return null object device. ', async () => {
       const FakePrismaClient = PrismaClientMock.new();
-      FakePrismaClient.devices.delete.mockRejectedValue({});
-      await device_repository.remove(FakePrismaClient, '1');
+      FakePrismaClient.devices.delete.mockResolvedValue(devices_fake);
+      await device_repository.remove(FakePrismaClient, '2');
       expect(FakePrismaClient.devices.delete).toBeCalled();
     });
 

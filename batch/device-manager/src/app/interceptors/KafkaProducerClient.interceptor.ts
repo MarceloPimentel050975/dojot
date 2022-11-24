@@ -15,8 +15,7 @@ export abstract class KafkaProducerClientInterceptor {
       next: NextFunction,
     ) => {
       const isConnected = await kafkaproducer.isConnected();
-
-      if (!isConnected) {
+      if (isConnected != null && isConnected != true) {
         logger.debug(
           'KafkaProducerClientInterceptor - Error Service Unavailable  ',
           {},

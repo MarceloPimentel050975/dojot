@@ -92,4 +92,20 @@ export class KafkaConsumer extends Kafka.Consumer {
       this.handleTenantEvent.bind(this),
     );
   }
+
+  unregisterCallbacks() {
+    if (this.callbackId) {
+      this.unregisterCallback(this.callbackId);
+      this.callbackId = null;
+      this.logger.debug(
+        'unregisterCallbacks: unregistered callback for tenant',
+        {},
+      );
+    } else {
+      this.logger.warn(
+        'unregisterCallbacks: there is no callback to unregister',
+        {},
+      );
+    }
+  }
 }

@@ -55,19 +55,12 @@ export class TemplatesRepository {
    * @returns Return one object Template and Array of object Attrs.
    */
   async findByIdWithAttrs(prisma: PrismaClient, id: number) {
-    try {
-      return await prisma.templates.findUnique({
-        where: { id: id },
-        include: {
-          attrs: {},
-        },
-      });
-    } catch (e: unknown) {
-      const error = e as Error;
-      this.logger.debug('TemplatesRepository - remove ', {
-        error: error.message,
-      });
-    }
+    return await prisma.templates.findUnique({
+      where: { id: id },
+      include: {
+        attrs: {},
+      },
+    });
   }
 
   /**
@@ -77,15 +70,8 @@ export class TemplatesRepository {
    * @returns  Return object null or template.
    */
   async remove(prisma: PrismaClient, id: number) {
-    try {
-      return await prisma.templates.delete({
-        where: { id: id },
-      });
-    } catch (e: unknown) {
-      const error = e as Error;
-      this.logger.debug('TemplatesRepository - remove ', {
-        error: error.message,
-      });
-    }
+    return await prisma.templates.delete({
+      where: { id: id },
+    });
   }
 }

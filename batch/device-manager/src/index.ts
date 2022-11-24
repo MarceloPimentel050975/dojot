@@ -49,8 +49,6 @@ const serviceState = new ServiceStateManager({
   ),
 });
 
-serviceState.registerService('dojot-device-manager-batch');
-
 secretFileHandler
   .handle('keycloak.client.secret', '/secrets/')
   .then(async () => {

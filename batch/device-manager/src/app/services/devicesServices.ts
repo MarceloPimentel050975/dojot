@@ -31,117 +31,111 @@ export class DevicesServices {
     dto: RemoveDevicesBatchDto,
     tenant_id: string,
   ): Promise<any> {
-    try {
-      let devices_result_batch: Array<any> = [];
-      const devices_not_found_batch: Array<any> = [];
-      const remove_devices_all_promisses = dto.devices.map(
-        async (device_id) => {
-          /**
-           * Assert device exists
-           */
-          const assert_device_exists =
-            await this.devicesRepository.findByIdWithTemplatesAttrs(
-              connection,
-              device_id.toString(),
-            );
-          this.logger.debug('Device to Deleted in database', {
-            assert_device_exists,
+    let devices_result_batch: Array<any> = [];
+    const devices_not_found_batch: Array<any> = [];
+    const remove_devices_all_promisses = dto.devices.map(async (device_id) => {
+      /**
+       * Assert device exists
+       */
+      const assert_device_exists =
+        await this.devicesRepository.findByIdWithTemplatesAttrs(
+          connection,
+          device_id.toString(),
+        );
+      this.logger.debug('Device to Deleted in database', {
+        assert_device_exists,
+      });
+
+      if (assert_device_exists != null) {
+        const templates_associated_with_device: Array<number> = [];
+        const attrs_associated_with_template_and_device: Array<any> = [];
+
+        assert_device_exists.device_template.forEach(async (element: any) => {
+          templates_associated_with_device.push(element.templates.id);
+          attrs_associated_with_template_and_device.push({
+            [element.templates.id.toString()]: element.templates.attrs,
           });
+        });
 
-          if (assert_device_exists != null) {
-            const templates_associated_with_device: Array<number> = [];
-            const attrs_associated_with_template_and_device: Array<any> = [];
+        /**
+         *  disassociated devices with template.
+         */
+        await this.devicesRepository.remove_associate_templates(
+          connection,
+          device_id.toString(),
+        );
 
-            assert_device_exists.device_template.map(async (element: any) => {
-              templates_associated_with_device.push(element.templates.id);
-              attrs_associated_with_template_and_device.push({
-                [element.templates.id.toString()]: element.templates.attrs,
-              });
-            });
+        /**
+         *  disassociated devices with overrides.
+         */
+        await this.devicesRepository.remove_associate_overrides(
+          connection,
+          device_id.toString(),
+        );
 
-            /**
-             *  disassociated devices with template.
-             */
-            await this.devicesRepository.remove_associate_templates(
-              connection,
-              device_id.toString(),
-            );
+        /**
+         *  disassociated devices with pre_shared_keys.
+         */
+        await this.devicesRepository.remove_associate_pre_shared_keys(
+          connection,
+          device_id.toString(),
+        );
+        /**
+         * Remove device of repository data.
+         */
+        const removed_device = await this.devicesRepository.remove(
+          connection,
+          device_id.toString(),
+        );
 
-            /**
-             *  disassociated devices with overrides.
-             */
-            await this.devicesRepository.remove_associate_overrides(
-              connection,
-              device_id.toString(),
-            );
+        /**
+         * Create Event in Kafka of remove device and publish of message in topic.
+         */
+        if (removed_device) {
+          const data = this.create_body_of_field_data_published_kafka(
+            assert_device_exists,
+            templates_associated_with_device,
+            attrs_associated_with_template_and_device,
+          );
+          await this.kafkaproducer.send(EventKafka.REMOVE, tenant_id, data);
+          this.logger.debug('Send Message Kafka - REMOVE Device.', {
+            removed_device,
+          });
+          /**
+           * Add element device in the Array to return.
+           */
+          devices_result_batch.push({
+            id: removed_device.id,
+            label: removed_device.label,
+          });
+          this.logger.debug(
+            'Object Database Devices add Array outputs devices.',
+            {
+              devices_result_batch,
+            },
+          );
+        }
+      } else {
+        /**
+         * Add element device NOT_FOUND in repository in the Array to return.
+         */
+        devices_not_found_batch.push({
+          id: device_id.toString(),
+          message: 'Device not found.',
+          type: 'NOT_FOUND',
+        });
 
-            /**
-             *  disassociated devices with pre_shared_keys.
-             */
-            await this.devicesRepository.remove_associate_pre_shared_keys(
-              connection,
-              device_id.toString(),
-            );
-            /**
-             * Remove device of repository data.
-             */
-            const removed_device = await this.devicesRepository.remove(
-              connection,
-              device_id.toString(),
-            );
+        this.logger.debug('Devices add Array outputs not found.', {
+          devices_not_found_batch,
+        });
+      }
+    });
+    await Promise.all(remove_devices_all_promisses);
 
-            /**
-             * Create Event in Kafka of remove device and publish of message in topic.
-             */
-            if (removed_device) {
-              const data = this.create_body_of_field_data_published_kafka(
-                assert_device_exists,
-                templates_associated_with_device,
-                attrs_associated_with_template_and_device,
-              );
-              await this.kafkaproducer.send(EventKafka.REMOVE, tenant_id, data);
-              this.logger.debug('Send Message Kafka - REMOVE Device.', {
-                removed_device,
-              });
-              /**
-               * Add element device in the Array to return.
-               */
-              devices_result_batch.push({
-                id: removed_device.id,
-                label: removed_device.label,
-              });
-              this.logger.debug(
-                'Object Database Devices add Array outputs devices.',
-                {
-                  devices_result_batch,
-                },
-              );
-            }
-          } else {
-            /**
-             * Add element device NOT_FOUND in repository in the Array to return.
-             */
-            devices_not_found_batch.push({
-              id: device_id.toString(),
-              message: 'Device not found.',
-              type: 'NOT_FOUND',
-            });
-
-            this.logger.debug('Devices add Array outputs not found.', {
-              devices_not_found_batch,
-            });
-          }
-        },
-      );
-      await Promise.all(remove_devices_all_promisses);
-
-      return {
-        devices: devices_result_batch,
-        devices_not_found: devices_not_found_batch,
-      };
-    } catch (error) {
-      this.logger.debug('Error', { error });
-    }
+    return {
+      devices: devices_result_batch,
+      devices_not_found: devices_not_found_batch,
+    };
   }
 
   /**
@@ -156,109 +150,101 @@ export class DevicesServices {
     dto: CreateDevicesBatchDto,
     tenant_id: string,
   ): Promise<any> {
-    try {
-      let devices_create_result_batch: Array<any> = [];
-      let devices_not_create_result_batch: Array<any> = [];
-      let attrs_not_found: Array<any> = [];
-      let start_sufix = dto.start_sufix;
+    let devices_create_result_batch: Array<any> = [];
+    let devices_not_create_result_batch: Array<any> = [];
+    let attrs_not_found: Array<any> = [];
+    let start_sufix = dto.start_sufix;
 
-      const array_asserts_templates_and_attrs_not_found_templates =
-        await this.assert_all_templates_valid_exits(connection, dto);
-      for (let index = 0; index < dto.quantity; index++) {
-        let name_prefix_device = dto.name_prefix + '-' + start_sufix;
-        let device_id_generated = this.prismaUtils.getRandomicHexIdDevices();
+    const array_asserts_templates_and_attrs_not_found_templates =
+      await this.assert_all_templates_valid_exits(connection, dto);
+    for (let index = 0; index < dto.quantity; index++) {
+      let name_prefix_device = dto.name_prefix + '-' + start_sufix;
+      let device_id_generated = this.prismaUtils.getRandomicHexIdDevices();
 
-        if (
-          array_asserts_templates_and_attrs_not_found_templates.templates_found
-            .length > 0
-        ) {
+      if (
+        array_asserts_templates_and_attrs_not_found_templates.templates_found
+          .length > 0
+      ) {
+        /**
+         * Assert exist object Device with parameter label = name_prefix_device.
+         */
+        const assert_devices_exists =
+          await this.devicesRepository.assert_devices_exists(
+            connection,
+            name_prefix_device,
+          );
+
+        if (assert_devices_exists) {
+          devices_not_create_result_batch.push({
+            id: assert_devices_exists.id,
+            label: assert_devices_exists.label,
+          });
+        } else {
           /**
-           * Assert exist object Device with parameter label = name_prefix_device.
+           * Create Device in repository.
            */
-          const assert_devices_exists =
-            await this.devicesRepository.assert_devices_exists(
-              connection,
-              name_prefix_device,
+          let createdDevices = await this.devicesRepository.create(
+            connection,
+            device_id_generated,
+            name_prefix_device,
+          );
+          this.logger.debug('Devices created in repository.', {
+            createdDevices,
+          });
+          if (createdDevices) {
+            const data = this.create_body_of_field_data_published_kafka(
+              createdDevices,
+              array_asserts_templates_and_attrs_not_found_templates.templates_found,
+              array_asserts_templates_and_attrs_not_found_templates.attrs_found,
             );
 
-          if (assert_devices_exists) {
-            devices_not_create_result_batch.push({
-              id: assert_devices_exists.id,
-              label: assert_devices_exists.label,
-            });
-          } else {
-            /**
-             * Create Device in repository.
-             */
-            let createdDevices = await this.devicesRepository.create(
-              connection,
-              device_id_generated,
-              name_prefix_device,
-            );
-            this.logger.debug('Devices created in repository.', {
+            await this.kafkaproducer.send(EventKafka.CREATE, tenant_id, data);
+            this.logger.debug('Send Message Kafka - CREATE Device.', {
               createdDevices,
             });
-            if (createdDevices) {
-              const data = this.create_body_of_field_data_published_kafka(
-                createdDevices,
-                array_asserts_templates_and_attrs_not_found_templates.templates_found,
-                array_asserts_templates_and_attrs_not_found_templates.attrs_found,
-              );
 
-              await this.kafkaproducer.send(EventKafka.CREATE, tenant_id, data);
-              this.logger.debug('Send Message Kafka - CREATE Device.', {
-                createdDevices,
-              });
+            /**
+             * Add element device in the Array to return.
+             */
+            devices_create_result_batch.push({
+              id: createdDevices.id,
+              label: createdDevices.label,
+            });
+            this.logger.debug('Devices created add Array.', {
+              devices_create_result_batch,
+            });
 
-              /**
-               * Add element device in the Array to return.
-               */
-              devices_create_result_batch.push({
-                id: createdDevices.id,
-                label: createdDevices.label,
-              });
-              this.logger.debug('Devices created add Array.', {
-                devices_create_result_batch,
-              });
-
-              /**
-               * Function load array of templates, and insert associated devices with templates.
-               */
-              array_asserts_templates_and_attrs_not_found_templates.templates_found.map(
-                async (id: number) => {
-                  let createdAssociatedDevicesTenplates =
-                    await this.devicesRepository.create_associated_devices_templates(
-                      connection,
-                      device_id_generated,
-                      id,
-                    );
-                  this.logger.debug(
-                    'Devices created Associated Devices in Tenplates.',
-                    {
-                      createdAssociatedDevicesTenplates,
-                    },
+            /**
+             * Function load array of templates, and insert associated devices with templates.
+             */
+            array_asserts_templates_and_attrs_not_found_templates.templates_found.map(
+              async (id: number) => {
+                let createdAssociatedDevicesTenplates =
+                  await this.devicesRepository.create_associated_devices_templates(
+                    connection,
+                    device_id_generated,
+                    id,
                   );
-                },
-              );
-            }
+                this.logger.debug(
+                  'Devices created Associated Devices in Tenplates.',
+                  {
+                    createdAssociatedDevicesTenplates,
+                  },
+                );
+              },
+            );
           }
         }
-        start_sufix++;
       }
-      return {
-        devices_created: devices_create_result_batch,
-        devices_not_created: devices_not_create_result_batch,
-        templates_not_found:
-          array_asserts_templates_and_attrs_not_found_templates.templates_not_found,
-        attrs_not_found: attrs_not_found,
-      };
-    } catch (e) {
-      const error = e as Error;
-      this.logger.debug('DevicesRepository - create_devices in batch ', {
-        error: error.message,
-      });
-      throw new Error(error.message);
+      start_sufix++;
     }
+    return {
+      devices_created: devices_create_result_batch,
+      devices_not_created: devices_not_create_result_batch,
+      templates_not_found:
+        array_asserts_templates_and_attrs_not_found_templates.templates_not_found,
+      attrs_not_found: attrs_not_found,
+    };
   }
 
   /**

@@ -19,7 +19,7 @@ export class TenantManager {
     this.tenants = [];
   }
 
-  private updateTenantSchema(tenant: string) {
+  updateTenantSchema(tenant: string) {
     this.prismaUtils.getDatabaseUrl(tenant, this.logger, this.config);
   }
 
